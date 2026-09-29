@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123a61">
+  <meta name="description" content="30개 배송지의 방문 순서를 직접 선택하고 직선거리 합계를 비교하는 MBA 최적화 수업 활동">
+  <title>배송 경로 만들기 | MBA 최적화 실습</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23123a61'/%3E%3Cpath d='M13 45 29 17l10 20 12-18' fill='none' stroke='%23ffd166' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    :root { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif; color:#132b43; background:#edf3f7; }
+    * { box-sizing:border-box; }
+    body { margin:0; }
+    header { background:#123a61; color:white; padding:13px 22px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    header h1 { font-size:1.2rem; margin:0; letter-spacing:-.02em; }
+    header span { color:#d9e8f5; font-size:.9rem; }
+    main { display:grid; grid-template-columns:minmax(0,1fr) 330px; height:calc(100dvh - 59px); min-height:620px; }
+    #map { min-height:520px; width:100%; height:100%; background:#dcebc4; display:block; }
+    aside { padding:20px; background:white; box-shadow:-3px 0 14px #14334d18; display:flex; flex-direction:column; gap:16px; overflow-y:auto; z-index:1; }
+    .eyebrow { color:#486b87; font-weight:700; font-size:.82rem; letter-spacing:.06em; }
+    h2 { margin:4px 0 8px; font-size:1.35rem; }
+    p { margin:0; line-height:1.55; }
+    .intro { color:#465d70; font-size:.96rem; }
+    .progress { background:#edf3f7; border-radius:14px; padding:14px; }
+    .progress strong { font-size:1.45rem; color:#123a61; }
+    .bar { height:9px; background:#d2e1eb; border-radius:20px; overflow:hidden; margin-top:9px; }
+    .bar > div { height:100%; background:#0072ce; width:0; transition:width .2s; }
+    .status { min-height:50px; background:#e7f2fc; color:#123a61; border-left:4px solid #0072ce; padding:11px 12px; border-radius:5px; font-weight:600; }
+    .controls { display:flex; gap:9px; }
+    button { appearance:none; border:1px solid #b7cbd8; background:white; color:#123a61; padding:11px 15px; border-radius:9px; font:inherit; font-weight:700; cursor:pointer; }
+    button:hover:not(:disabled), button:focus-visible { border-color:#0072ce; outline:2px solid #0072ce33; }
+    button:disabled { opacity:.42; cursor:not-allowed; }
+    .route-label { font-weight:700; margin-bottom:7px; }
+    #route-list { display:flex; flex-wrap:wrap; gap:5px; align-content:flex-start; color:#37516a; font-size:.88rem; }
+    .route-chip { background:#edf3f7; border-radius:6px; padding:5px 7px; }
+    .result { border-radius:14px; padding:16px; background:#123a61; color:white; display:none; }
+    .result.show { display:block; }
+    .result .value { display:block; font-size:2.2rem; font-weight:800; letter-spacing:-.04em; margin:4px 0; }
+    .result small { color:#d6e6f3; }
+    .note { margin-top:auto; padding-top:8px; border-top:1px solid #e2eaf0; color:#526a7d; font-size:.82rem; line-height:1.5; }
+    .point { cursor:pointer; }
+    .background-house .house-body { fill:#fff6e7; stroke:#a9a799; stroke-width:1.5; }
+    .background-house .house-roof { fill:#ae8c77; stroke:#f6efe3; stroke-width:2; }
+    .background-house .house-roof-light { fill:#caaa95; }
+    .background-house .house-door { fill:#aa8875; }
+    .point .house-body { fill:#f9f2e3; stroke:#8eaaad; stroke-width:1.3; }
+    .point .house-roof { fill:#126cb4; stroke:#e8f4fc; stroke-width:2.1; }
+    .point .house-roof-light { fill:#4f9ed0; }
+    .point .house-door { fill:#91705c; }
+    .point.visited .house-body { fill:#e8edeb; stroke:#8d9da1; }
+    .point.visited .house-roof, .point.visited .house-roof-light, .point.visited .house-door { fill:#8b9da2; }
+    .point.depot .house-body { fill:#fff2ce; stroke:#b48740; }
+    .point.depot .house-roof { fill:#e7a627; }
+    .point.depot .house-roof-light { fill:#f5cc67; }
+    .point.depot .house-door { fill:#9f6939; }
+    .point:focus-visible .house-roof { stroke:#e84942; stroke-width:4; }
+    .point .number-badge { fill:#fff; stroke:#126cb4; stroke-width:2; }
+    .point .number-text { fill:#12446b; font-size:13px; font-weight:800; text-anchor:middle; dominant-baseline:middle; }
+    .point.visited .number-badge { stroke:#839ba1; }
+    .point.visited .number-text { fill:#52666e; }
+    @media(max-width:760px) { header { padding:12px 16px; } header span { display:none; } main { display:flex; flex-direction:column; height:auto; min-height:0; } #map { height:59dvh; min-height:380px; } aside { min-height:410px; padding:16px; overflow:visible; } .note { margin-top:6px; } }
+  </style>
+</head>
+<body>
+  <header><h1>배송 경로 만들기</h1><span>MBA 비즈니스애널리틱스 · 최적화 1주차</span></header>
+  <main>
+    <svg id="map" viewBox="0 0 1000 800" role="group" aria-label="가상 배송 구역 지도와 배송지 30곳">
+      <rect width="1000" height="800" fill="#dcebc4"/>
+      <g id="map-layer"></g><g id="route-layer"></g><g id="point-layer"></g>
+      <rect x="24" y="22" width="265" height="63" rx="8" fill="white" fill-opacity=".9"/>
+      <text x="38" y="49" fill="#385970" font-size="20" font-weight="700">가상 배송 구역</text>
+      <text x="38" y="73" fill="#536e80" font-size="14">북 ↑  ·  직선거리로 계산</text>
+      <g transform="translate(48 746)" fill="#385970" font-size="15"><path d="M0 0h90" stroke="#385970" stroke-width="4"/><path d="M0 -8v16M90 -8v16" stroke="#385970" stroke-width="3"/><text x="24" y="-14">1 km</text></g>
+    </svg>
+    <aside>
+      <div><div class="eyebrow">가상 배송 구역</div><h2>30곳을 모두 방문하세요</h2><p class="intro">파란 지붕 집을 원하는 순서로 클릭하세요. 30곳을 방문한 후 노란 출발지를 다시 클릭하면 총거리를 계산합니다.</p></div>
+      <div class="progress"><strong id="count">0 / 30</strong> 방문 완료<div class="bar" aria-hidden="true"><div id="bar-fill"></div></div></div>
+      <div id="status" class="status" role="status" aria-live="polite">첫 배송지를 선택하세요.</div>
+      <div class="controls"><button id="undo" disabled>한 단계 되돌리기</button><button id="reset">처음부터</button></div>
+      <div id="result" class="result" aria-live="polite"><div>완성한 경로의 총 직선거리</div><span id="distance" class="value"></span><small>출발지와 30곳을 연결하고 돌아오는 31개 구간의 합계입니다.</small></div>
+      <p class="note">평원과 집은 수업용 그림이며 번호가 붙은 30개의 파란 지붕 집이 배송지입니다. 번호는 위치와 무관하게 섞여 있습니다. 거리는 각 배송지의 가상 좌표 사이의 직선거리로 계산합니다.</p>
+    </aside>
+  </main>
+  <script>
+    const depot = {id:0,lat:37.2749,lng:127.0167};
+    const stops = [
+      [37.285589,127.010521],[37.251723,126.988579],[37.249126,127.007873],[37.298676,127.003333],[37.269106,127.038011],
+      [37.250325,127.045956],[37.255419,127.025527],[37.266608,127.062349],[37.290584,127.013926],[37.282692,126.998289],
+      [37.292582,126.987318],[37.247228,126.995641],[37.280894,126.984796],[37.250025,127.022375],[37.300974,126.996271],
+      [37.283791,127.039777],[37.273901,127.004846],[37.246329,126.982526],[37.293182,127.026410],[37.266908,126.986561],
+      [37.283791,127.032589],[37.288986,126.979247],[37.258416,127.003711],[37.246528,127.036877],[37.290285,127.033220],
+      [37.267507,126.968276],[37.269106,126.979878],[37.298476,126.971807],[37.298576,127.014556],[37.263511,127.018465]
+    ].map(([lat,lng],i)=>({id:i+1,lat,lng}));
+    const all = [depot,...stops];
+    // Local equirectangular projection: kilometers. Same fixed coordinates for every student.
+    const rad = Math.PI/180, earthKm=6371.0088, refLat=depot.lat*rad;
+    const xy = all.map(p=>({x:earthKm*p.lng*rad*Math.cos(refLat),y:earthKm*p.lat*rad}));
+    const matrix = all.map((_,i)=>all.map((__,j)=>Math.hypot(xy[i].x-xy[j].x,xy[i].y-xy[j].y)));
+    let order=[], finished=false;
+    const count=document.getElementById('count'), bar=document.getElementById('bar-fill'), status=document.getElementById('status');
+    const result=document.getElementById('result');
+    const undo=document.getElementById('undo'), reset=document.getElementById('reset');
+    const svgNS='http://www.w3.org/2000/svg';
+    const mapLayer=document.getElementById('map-layer'), routeLayer=document.getElementById('route-layer'), pointLayer=document.getElementById('point-layer');
+    const make=(tag,attrs={})=>{const el=document.createElementNS(svgNS,tag);for(const [key,val] of Object.entries(attrs))el.setAttribute(key,val);return el;};
+    // An offline, decorative meadow with no roads or implied driving distance.
+    [
+      'M-30 138 Q180 72 387 135 T759 117 T1030 141 L1030 0 -30 0Z',
+      'M-30 480 Q206 407 415 477 T799 451 T1030 491 L1030 298 Q765 335 519 287 T-30 317Z',
+      'M-30 747 Q217 679 419 737 T819 704 T1030 720 L1030 830 -30 830Z'
+    ].forEach((d,i)=>mapLayer.append(make('path',{d,fill:i===1?'#cfe5ae':'#c7dfac',opacity:'.72'})));
+    for(let i=0;i<95;i++){
+      const x=(i*173+45)%1000,y=(i*263+97)%800;
+      mapLayer.append(make('path',{d:`M${x-4} ${y+2}l4 -5 4 5M${x} ${y+2}v-6`,fill:'none',stroke:i%3?'#a7c88f':'#93ba78','stroke-width':1.5,opacity:'.68'}));
+    }
+    const houseArt=(g,depotHouse=false)=>{
+      g.append(make('ellipse',{cx:1,cy:19,rx:21,ry:5,fill:'#4c7c5b',opacity:'.22'}));
+      g.append(make('path',{d:'M-13 -8v-11h6v6',fill:'#d4a583',stroke:'#fff5dc','stroke-width':1}));
+      g.append(make('rect',{class:'house-body',x:-16,y:-8,width:32,height:25,rx:2}));
+      g.append(make('path',{class:'house-roof',d:'M-21 -8L0 -26 21 -8 17 -5 0 -19 -17 -5Z'}));
+      g.append(make('path',{class:'house-roof-light',d:'M0 -24L18 -8 15 -8 0 -20Z'}));
+      g.append(make('rect',{x:-12,y:0,width:10,height:9,rx:1,fill:'#9bd2e2',stroke:'#fff','stroke-width':2}));
+      g.append(make('path',{d:'M-7 0v9M-12 4.5h10',stroke:'#fff','stroke-width':1}));
+      g.append(make('rect',{class:'house-door',x:5,y:2,width:8,height:15,rx:1}));
+      g.append(make('circle',{cx:11,cy:10,r:1,fill:'#f8e0aa'}));
+      if(depotHouse)g.append(make('rect',{x:-13,y:13,width:11,height:3,rx:1,fill:'#e8b84e'}));
+    };
+    const backdropHouse=(x,y,i)=>{
+      const g=make('g',{class:'background-house',transform:`translate(${x} ${y}) scale(.66)`,opacity:'.52'});
+      houseArt(g);mapLayer.append(g);
+    };
+    for(let i=0;i<34;i++)backdropHouse(52+(i*239)%900,108+(i*167)%590,i);
+    // Markers use the fixed geographic coordinates supplied for this exercise.
+    const zoom=13, worldSize=256*2**zoom;
+    const world=p=>({x:(p.lng+180)/360*worldSize,y:(1-Math.asinh(Math.tan(p.lat*rad))/Math.PI)/2*worldSize});
+    const center=world(depot), pxPerKm=worldSize/(2*Math.PI*earthKm*Math.cos(refLat));
+    const scale=90/pxPerKm;
+    const screen=all.map(p=>{const w=world(p);return {x:500+(w.x-center.x)*scale,y:400+(w.y-center.y)*scale};});
+    const line=make('polyline',{fill:'none',stroke:'#dc4b45','stroke-width':5,'stroke-linecap':'round','stroke-linejoin':'round'});
+    routeLayer.append(line);
+    const markers=all.map(p=>{
+      const g=make('g',{class:`point${p.id===0?' depot':''}`,role:'button',tabindex:'0','aria-label':p.id===0?'출발지 및 도착지':`배송지 ${p.id}`});
+      const {x,y}=screen[p.id];
+      g.append(make('circle',{cx:x,cy:y,r:29,fill:'transparent'}));
+      const art=make('g',{transform:`translate(${x} ${y})`,'pointer-events':'none'});
+      houseArt(art,p.id===0);g.append(art);
+      if(p.id===0){
+        const label=make('g',{'pointer-events':'none'});
+        label.append(make('rect',{x:x+25,y:y-25,width:130,height:30,rx:7,fill:'#fff9e9',stroke:'#9e741d','stroke-width':1.5}));
+        const t=make('text',{x:x+35,y:y-5,fill:'#523b0f','font-size':16,'font-weight':700});
+        t.textContent='0 · 출발지·도착지';label.append(t);g.append(label);
+      }else{
+        const badge=make('g',{'pointer-events':'none'});
+        badge.append(make('circle',{class:'number-badge',cx:x+19,cy:y-18,r:12}));
+        const t=make('text',{class:'number-text',x:x+19,y:y-17});
+        t.textContent=String(p.id);badge.append(t);g.append(badge);
+      }
+      g.addEventListener('click',()=>select(p.id));
+      g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(p.id);}});
+      pointLayer.append(g);return g;
+    });
+    function select(id){
+      if(finished) return;
+      if(id===0){
+        if(order.length!==stops.length){status.textContent=`배송지 ${stops.length-order.length}곳을 더 방문해야 출발지로 돌아올 수 있습니다.`;return;}
+        finished=true;render();return;
+      }
+      if(order.includes(id)){status.textContent='이미 방문한 지점입니다.';return;}
+      order.push(id);render();
+    }
+    function render(){
+      const ids=[0,...order,...(finished?[0]:[])];
+      line.setAttribute('points',ids.map(id=>`${screen[id].x},${screen[id].y}`).join(' '));
+      count.textContent=`${order.length} / ${stops.length}`;bar.style.width=`${100*order.length/stops.length}%`;
+      undo.disabled=order.length===0||finished;
+      stops.forEach(p=>markers[p.id].classList.toggle('visited',order.includes(p.id)));
+      if(finished){
+        const total=ids.slice(1).reduce((sum,id,k)=>sum+matrix[ids[k]][id],0);
+        document.getElementById('distance').textContent=`${total.toFixed(2)} km`;
+        result.classList.add('show');status.textContent='경로가 완성되었습니다. 총거리를 확인하세요.';
+      }else{
+        result.classList.remove('show');
+        status.textContent=order.length===stops.length?'이제 노란 출발지를 클릭해 돌아오세요.':`다음 배송지를 선택하세요. 남은 배송지 ${stops.length-order.length}곳.`;
+      }
+    }
+    undo.addEventListener('click',()=>{if(!finished&&order.length){order.pop();render();}});
+    reset.addEventListener('click',()=>{order=[];finished=false;render();});
+    if(document.modelContext?.registerTool){
+      void Promise.resolve(document.modelContext.registerTool({
+        name:'set_delivery_route',title:'배송 순서 설정',description:'배송지 1부터 30까지의 방문 순서를 설정하고 출발지로 귀환해 거리 계산을 완료합니다.',
+        inputSchema:{type:'object',properties:{order:{type:'array',items:{type:'integer',minimum:1,maximum:30},minItems:30,maxItems:30}},required:['order'],additionalProperties:false},
+        annotations:{readOnlyHint:false},execute(input){
+          const candidate=input?.order;
+          if(!Array.isArray(candidate)||candidate.length!==30||new Set(candidate).size!==30||candidate.some(n=>!Number.isInteger(n)||n<1||n>30))throw new Error('1부터 30까지 각 배송지를 정확히 한 번씩 입력해야 합니다.');
+          order=[...candidate];finished=true;render();
+          return {distanceKm:Number(document.getElementById('distance').textContent.split(' ')[0]),order:[0,...order,0]};
+        }
+      })).catch(()=>{});
+    }
+  </script>
+</body>
+</html>
